@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TWICE Memory Match - Game Edition</title>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;500;700&display=swap" rel="stylesheet">
+    <style>
+        :root { --twice-pink: #ff4081; --twice-apricot: #f68a5c; --dark: #121212; --gold: #ffd700; }
+        body { font-family: 'Kanit', sans-serif; background-color: var(--dark); color: white; margin: 0; padding: 20px; text-align: center; overflow-x: hidden; }
+        .container { max-width: 600px; margin: auto; }
+        
+        /* Game Board Grid */
+        .game-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 10px; margin: 20px 0; perspective: 1000px; }
+        
+        /* Card Styles */
+        .card { width: 100%; aspect-ratio: 1; position: relative; cursor: pointer; transform-style: preserve-3d; transition: transform 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+        .card.flipped { transform: rotateY(180deg); }
+        
+        /* เมื่อ Match แล้วให้มีแสง Glow สีทองล้อมรอบ */
+        .card.matched { transform: rotateY(180deg) scale(0.95); cursor: default; }
+        .card.matched .card-back { border: 3px solid var(--gold); box-shadow: 0 0 15px var(--gold); filter: brightness(1.1); }
+        
+        .card-face { position: absolute; width: 100%; height: 100%; backface-visibility: hidden; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 30px; border: 2px solid #333; }
+        
+        .card-front { background: linear-gradient(45deg, var(--twice-pink), var(--twice-apricot)); color: white; }
+        .card-back { background: #222; transform: rotateY(180deg); padding: 5px; box-sizing: border-box; }
+        .card-back img { width: 100%; height: 100%; border-radius: 8px; object-fit: cover; pointer-events: none; }
+
+        /* Effects & Winner Overlay */
+        .candy-bong { position: fixed; font-size: 35px; pointer-events: none; z-index: 5000; }
+        .confetti { position: fixed; width: 10px; height: 10px; z-index: 4500; pointer-events: none; border-radius: 2px; }
+
+        #winnerOverlay {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: radial-gradient(circle, rgba(255,64,129,0.95) 0%, rgba(18,18,18,1) 100%);
+            z-index: 9999; flex-direction: column; justify-content: center; align-items: center;
+        }
+        .winner-box {
+            background: rgba(255, 255, 255, 0.1); padding: 40px 20px; border-radius: 40px;
+            border: 2px solid var(--gold); box-shadow: 0 0 50px rgba(255, 215, 0, 0.3);
+            backdrop-filter: blur(10px); width: 85%; max-width: 400px;
+            animation: winnerPop 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+        }
+        @keyframes winnerPop { from { transform: scale(0.5); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+        .btn-restart { background: var(--twice-pink); color: white; border: none; padding: 12px 30px; border-radius: 30px; font-size: 18px; font-weight: bold; cursor: pointer; margin-top: 20px; transition: 0.2s; }
+        .btn-restart:active { transform: scale(0.92); }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h1 style="color: var(--twice-pink);">🍭 TWICE Memory Match</h1>
+    <div style="font-size: 20px; margin-bottom: 10px; font-weight: bold;">
+        เวลา: <span id="timer" style="color: var(--twice-apricot);">0</span> วินาที
+    </div>
+    
+    <div id="gameGrid" class="game-grid"></div>
+    <button class="btn-restart" onclick="resetGame()">ล้างกระดาน / เริ่มใหม่</button>
+</div>
+
+<div id="winnerOverlay">
+    <div class="winner-box">
+        <div style="color: var(--gold); letter-spacing: 3px; font-weight: bold;">✨ MISSION COMPLETE ✨</div>
+        <h1 style="font-size: 45px; margin: 10px 0; color: #fff;">เก่งมาก ONCE!</h1>
+        <div id="finalTime" style="color: var(--gold); font-size: 28px; font-weight: bold; margin: 15px 0;"></div>
+        <button class="btn-restart" style="background: #fff; color: var(--twice-pink);" onclick="resetGame()">เล่นอีกรอบ 🍭</button>
+    </div>
+</div>
+
+<script>
+    const memberPhotos = {
+        "Nayeon": "https://i.pinimg.com/1200x/01/ec/36/01ec363372caae0f0a62c0dbf5a93741.jpg",
+        "Jeongyeon": "https://i.pinimg.com/736x/0d/c3/36/0dc33624e51b1f2210b0888b66edaea2.jpg",
+        "Momo": "https://i.pinimg.com/1200x/ad/5c/e6/ad5ce6e7deba0121974c4e422d54c470.jpg",
+        "Sana": "https://i.pinimg.com/736x/32/b5/5c/32b55cb670a37ad4727e31f2bd7f44a0.jpg",
+        "Jihyo": "https://i.pinimg.com/736x/a4/22/a3/a422a3890432a947b50394e31d356acd.jpg",
+        "Mina": "https://i.pinimg.com/736x/83/2d/4a/832d4a80555c75ab4403defe9b876289.jpg",
+        "Dahyun": "https://i.pinimg.com/736x/75/bc/24/75bc24c0efc29ed9eea6ab3bdadc7437.jpg",
+        "Chaeyoung": "https://i.pinimg.com/1200x/84/ab/37/84ab37be4485041e3dfd652e9d79dd27.jpg"
+    };
+
+    let flippedCards = [];
+    let matchedCount = 0;
+    let seconds = 0;
+    let timerInterval;
+    let isLocked = false;
+
+    function initGame() {
+        const memberList = Object.keys(memberPhotos);
+        const gameCards = [...memberList, ...memberList].sort(() => Math.random() - 0.5);
+
+        const grid = document.getElementById('gameGrid');
+        grid.innerHTML = '';
+        matchedCount = 0;
+        seconds = 0;
+        document.getElementById('timer').innerText = seconds;
+        startTimer();
+
+        gameCards.forEach(name => {
+            const card = document.createElement('div');
+            card.className = 'card';
+            card.dataset.name = name;
+            card.innerHTML = `
+                <div class="card-face card-front">🍭</div>
+                <div class="card-face card-back"><img src="${memberPhotos[name]}"></div>
+            `;
+            card.onclick = () => flipCard(card);
+            grid.appendChild(card);
+        });
+    }
+
+    function flipCard(card) {
+        if (isLocked || card.classList.contains('flipped') || card.classList.contains('matched')) return;
+
+        card.classList.add('flipped');
+        flippedCards.push(card);
+
+        if (flippedCards.length === 2) {
+            isLocked = true;
+            checkMatch();
+        }
+    }
+
+    function checkMatch() {
+        const [card1, card2] = flippedCards;
+        if (card1.dataset.name === card2.dataset.name) {
+            // MATCHED! ค้างรูปไว้และแสดงเอฟเฟกต์
+            card1.classList.add('matched');
+            card2.classList.add('matched');
+            matchedCount += 2;
+            
+            const rect = card2.getBoundingClientRect();
+            for(let i=0; i<12; i++) spawnCandy(rect.left + rect.width/2, rect.top + rect.height/2);
+
+            flippedCards = [];
+            isLocked = false;
+
+            if (matchedCount === 16) gameWin();
+        } else {
+            // ไม่ Match ให้รอ 1 วินาทีแล้วพลิกกลับ
+            setTimeout(() => {
+                card1.classList.remove('flipped');
+                card2.classList.remove('flipped');
+                flippedCards = [];
+                isLocked = false;
+            }, 1000);
+        }
+    }
+
+    function startTimer() {
+        clearInterval(timerInterval);
+        timerInterval = setInterval(() => {
+            seconds++;
+            document.getElementById('timer').innerText = seconds;
+        }, 1000);
+    }
+
+    function gameWin() {
+        clearInterval(timerInterval);
+        spawnConfetti(); // 🎉
+        document.getElementById('finalTime').innerText = `ใช้เวลาไป ${seconds} วินาที`;
+        setTimeout(() => {
+            document.getElementById('winnerOverlay').style.display = 'flex';
+        }, 800);
+    }
+
+    function resetGame() {
+        document.getElementById('winnerOverlay').style.display = 'none';
+        initGame();
+    }
+
+    function spawnCandy(x, y) {
+        const p = document.createElement('div');
+        p.className = 'candy-bong'; p.innerText = '🍭';
+        document.body.appendChild(p);
+        const dX = (Math.random()-0.5) * 500;
+        const dY = (Math.random()-0.5) * 500;
+        p.animate([{transform:`translate(${x}px,${y}px) scale(1.2)`, opacity:1}, 
+                   {transform:`translate(${x+dX}px,${y+dY}px) scale(0) rotate(720deg)`, opacity:0}], 1500).onfinish = () => p.remove();
+    }
+
+    function spawnConfetti() {
+        for(let i=0; i<80; i++) {
+            const c = document.createElement('div');
+            c.className = 'confetti';
+            c.style.left = Math.random()*100 + 'vw';
+            c.style.backgroundColor = ['#ff4081','#f68a5c','#ffd700','#ffffff'][Math.floor(Math.random()*4)];
+            document.body.appendChild(c);
+            c.animate([{top:'-10vh', transform:'rotate(0deg)'}, {top:'110vh', transform:'rotate(1000deg)'}], 
+                      {duration: Math.random()*2000+3000, easing:'ease-out'}).onfinish = () => c.remove();
+        }
+    }
+
+    initGame();
+</script>
+</body>
+</html>
